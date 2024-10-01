@@ -40,14 +40,10 @@ namespace _1CInstaller
             Update.MouseEnter += (s, e) => { Update.BackColor = Color.DarkGoldenrod; }; // Изменение цвета при наведении
             Update.MouseLeave += (s, e) => { Update.BackColor = Color.Gold; };  // Возвращение цвета при уходе курсора
 
-            // Настройка кнопки "Settings"
-            Settings.BackColor = Color.Gold; // Мягкий светло-зелёный цвет
-            Settings.ForeColor = Color.DarkSlateGray; // Цвет текста кнопки (белый)
+            // Настройка кнопки "Settings"            
             Settings.FlatStyle = FlatStyle.Flat; // Убираем 3D-эффект
-            Settings.Font = new Font("Segoe UI", 12, FontStyle.Bold); // Шрифт кнопки
-            // Добавляем обработчики событий для изменения цвета при наведении и уходе курсора
-            Settings.MouseEnter += (s, e) => { Settings.BackColor = Color.DarkGoldenrod; }; // Изменение цвета при наведении
-            Settings.MouseLeave += (s, e) => { Settings.BackColor = Color.Gold; };  // Возвращение цвета при уходе курсора
+            Settings.BackColor = Color.Transparent;
+            Settings.FlatAppearance.BorderSize = 0;            
 
             // Настройка RichTextBox
             richTextBoxVersions.BackColor = Color.WhiteSmoke; // Цвет фона RichTextBox (светло-серый)
@@ -378,6 +374,15 @@ namespace _1CInstaller
             {
                 AddMessageToRichTextBox(richTextBoxVersions, "Ошибка авторизации: " + ex.Message);
             }
+        }
+
+        private void Settings_Click(object sender, EventArgs e)
+        {
+            // Создаём экземпляр формы настроек
+            Settings settingsForm = new Settings();
+
+            // Открываем форму настроек в модальном окне
+            settingsForm.ShowDialog();
         }
     }
 }

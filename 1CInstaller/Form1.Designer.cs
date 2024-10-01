@@ -87,12 +87,17 @@ namespace _1CInstaller
             // 
             // Settings
             // 
+            this.Settings.BackColor = System.Drawing.Color.Transparent;
+            this.Settings.BackgroundImage = global::_1CInstaller.Properties.Resources.icons8_settings_32;
+            this.Settings.BackgroundImageLayout = System.Windows.Forms.ImageLayout.Stretch;
             this.Settings.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
             this.Settings.Location = new System.Drawing.Point(476, 243);
+            this.Settings.Margin = new System.Windows.Forms.Padding(0);
             this.Settings.Name = "Settings";
             this.Settings.Size = new System.Drawing.Size(32, 32);
             this.Settings.TabIndex = 7;
-            this.Settings.UseVisualStyleBackColor = true;
+            this.Settings.UseVisualStyleBackColor = false;
+            this.Settings.Click += new System.EventHandler(this.Settings_Click);
             // 
             // Form1
             // 
