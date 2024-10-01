@@ -1,5 +1,7 @@
-﻿using System;
+﻿using Microsoft.Win32;
+using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -13,31 +15,81 @@ namespace _1CInstaller
     {
         
         private IFtpClient ftpClient;
-        private string installerPath;
+        private string installerPath;//Домашняя директория программы
+        private string platformsPath;//Путь к каталогу куда скачивается дистрибутив
         private string latestFtpVersion;
         private List<string> ftpFileList;
         private CancellationTokenSource cancellationTokenSource;
         private PingChecker pingChecker;
+        private HashSet<string> oneCPrograms;
 
         public Form1()
         {
             InitializeComponent();
             InitializeInstallerPath();
-            
+
+            // Изменение цвета фона формы
+            //this.BackColor = Color.LightGray; // Светло-серый фон
+            this.BackColor = Color.WhiteSmoke; // Светло-серый фон
+            // Настройка кнопки "Обновить"
+            Update.BackColor = Color.Gold; // Мягкий светло-зелёный цвет
+            Update.ForeColor = Color.DarkSlateGray; // Цвет текста кнопки (белый)
+            Update.FlatStyle = FlatStyle.Flat; // Убираем 3D-эффект
+            Update.Font = new Font("Segoe UI", 12, FontStyle.Bold); // Шрифт кнопки
+            // Добавляем обработчики событий для изменения цвета при наведении и уходе курсора
+            Update.MouseEnter += (s, e) => { Update.BackColor = Color.DarkGoldenrod; }; // Изменение цвета при наведении
+            Update.MouseLeave += (s, e) => { Update.BackColor = Color.Gold; };  // Возвращение цвета при уходе курсора
+
+            // Настройка кнопки "Settings"
+            Settings.BackColor = Color.Gold; // Мягкий светло-зелёный цвет
+            Settings.ForeColor = Color.DarkSlateGray; // Цвет текста кнопки (белый)
+            Settings.FlatStyle = FlatStyle.Flat; // Убираем 3D-эффект
+            Settings.Font = new Font("Segoe UI", 12, FontStyle.Bold); // Шрифт кнопки
+            // Добавляем обработчики событий для изменения цвета при наведении и уходе курсора
+            Settings.MouseEnter += (s, e) => { Settings.BackColor = Color.DarkGoldenrod; }; // Изменение цвета при наведении
+            Settings.MouseLeave += (s, e) => { Settings.BackColor = Color.Gold; };  // Возвращение цвета при уходе курсора
+
+            // Настройка RichTextBox
+            richTextBoxVersions.BackColor = Color.WhiteSmoke; // Цвет фона RichTextBox (светло-серый)
+            richTextBoxVersions.ForeColor = Color.Black; // Цвет текста
+            richTextBoxVersions.BorderStyle = BorderStyle.FixedSingle; // Сделать рамку тонкой и аккуратной
+            richTextBoxVersions.Font = new Font("Consolas", 10); // Более читаемый шрифт с моношириной
+
             ftpClient = new FtpClient("ftp://ftp.in-grp.net", "anonymous", "1@1");
             login1C.Visible = false;
-            pingChecker = new PingChecker("ftp.in-grp.net", richTextBoxVersions);
+            //pingChecker = new PingChecker("http://ig.badcore.net:14178/AccountingIG", richTextBoxVersions);
+            oneCPrograms = new HashSet<string>();
+            LoadInstalledOneCVersions();
+
         }
 
         private void InitializeInstallerPath()
         {
             string appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-            installerPath = Path.Combine(appDataPath, "InstanceInstaller");
+            installerPath = Path.Combine(appDataPath, "1CInstaller");
+
+            // Создание каталога 1CInstaller, если он не существует
             if (!Directory.Exists(installerPath))
             {
                 Directory.CreateDirectory(installerPath);
             }
+
+            // Создание файла settings.ini в кодировке по умолчанию, если файл не существует
+            string settingsFilePath = Path.Combine(installerPath, "settings.ini");
+            if (!File.Exists(settingsFilePath))
+            {
+                // Создаём пустой файл в текущей системной кодировке
+                File.WriteAllText(settingsFilePath, string.Empty, System.Text.Encoding.Default);
+            }
+
+            // Создание подкаталога platforms, если он не существует
+            platformsPath = Path.Combine(installerPath, "platforms");
+            if (!Directory.Exists(platformsPath))
+            {
+                Directory.CreateDirectory(platformsPath);
+            }
         }
+
         private void ClearDirectory(string path)
         {
             if (Directory.Exists(path))
@@ -54,13 +106,74 @@ namespace _1CInstaller
                 }
             }
         }
+        // Метод для получения и отображения установленных версий 1С
+        private void LoadInstalledOneCVersions()
+        {
+            //HashSet<string> oneCPrograms = new HashSet<string>();
+
+            // Получаем программы для 64-битной системы
+            GetInstalledPrograms(RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64),
+                @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall", oneCPrograms);
+
+            // Получаем программы для 32-битной системы
+            GetInstalledPrograms(RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry32),
+                @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall", oneCPrograms);
+
+            // Если программ не найдено, выводим сообщение
+            if (oneCPrograms.Count == 0)
+            {
+                // Сообщение о том, что ни одной версии 1С не установлено
+                AddMessageToRichTextBox(richTextBoxVersions, "Не установлено ни одной версии 1С:Предприятие.");
+            }
+            else
+            {
+                // Сортируем список по алфавиту и выводим в richTextBoxVersions
+                richTextBoxVersions.SelectionStart = richTextBoxVersions.TextLength;
+                richTextBoxVersions.SelectionFont = new Font(richTextBoxVersions.Font.FontFamily, 13, FontStyle.Bold); // Полужирный шрифт размером 16                
+                richTextBoxVersions.AppendText("Установленные версии 1С:Предприятие:\n");
+                richTextBoxVersions.SelectionFont = new Font(richTextBoxVersions.Font, FontStyle.Regular); // Вернуть обычный шрифт
+
+                var sortedOneCPrograms = oneCPrograms.OrderBy(name => name).ToList();
+                foreach (var program in sortedOneCPrograms)
+                {
+                    richTextBoxVersions.AppendText(program + Environment.NewLine);
+                }
+            }
+        }
+
+        // Метод для получения установленных программ из реестра
+        private void GetInstalledPrograms(RegistryKey root, string key, HashSet<string> oneCPrograms)
+        {
+            using (RegistryKey registryKey = root.OpenSubKey(key))
+            {
+                if (registryKey != null)
+                {
+                    foreach (string subKeyName in registryKey.GetSubKeyNames())
+                    {
+                        using (RegistryKey subKey = registryKey.OpenSubKey(subKeyName))
+                        {
+                            var displayName = subKey?.GetValue("DisplayName") as string;
+                            if (!string.IsNullOrEmpty(displayName) && displayName.Contains("1С:Предприятие"))                            
+                            {
+                                oneCPrograms.Add(displayName); // Добавляем только уникальные программы
+                            }
+                        }
+                    }
+                }
+            }
+        }
         private async void Update_Click(object sender, EventArgs e)
         {
+            
             if (Update.Text == "Остановить")
             {
                 cancellationTokenSource.Cancel();
                 Update.Text = "Обновить";
                 downloadStatusLabel.Text = string.Empty;
+                // Дожидаемся завершения всех асинхронных операций
+                await Task.Delay(500); // Небольшая задержка для завершения операций с файлом
+                // Очистка каталога platforms при остановке
+                ClearDirectory(platformsPath);
                 return;
             }
 
@@ -82,14 +195,14 @@ namespace _1CInstaller
                 Update.Text = "Обновить";
                 return;
             }
-
-            var installedVersions = GetAllInstalledVersions();
-            if (!installedVersions.Contains(latestFtpVersion))
+            
+            if (!oneCPrograms.Any(program => program.Contains(latestFtpVersion)))
             {
                 AddMessageToRichTextBox(richTextBoxVersions, $"Необходимо установить версию с FTP: {latestFtpVersion}");
-
+                // Путь к каталогу platforms
+                //string platformsPath = Path.Combine(installerPath, "platforms");
                 // Очистка каталога перед скачиванием
-                ClearDirectory(installerPath);
+                ClearDirectory(platformsPath);
 
                 string fileToDownload = ftpFileList.FirstOrDefault();
                 if (string.IsNullOrEmpty(fileToDownload))
@@ -100,7 +213,7 @@ namespace _1CInstaller
                 }
 
                 string ftpFilePath = "ftp://ftp.in-grp.net/installers/" + fileToDownload;
-                string localFilePath = Path.Combine(installerPath, fileToDownload);
+                string localFilePath = Path.Combine(platformsPath, fileToDownload);
 
                 bool downloadSuccess = await ftpClient.DownloadFileAsync(ftpFilePath, localFilePath, downloadStatusLabel, richTextBoxVersions, cancellationTokenSource.Token);
 
@@ -112,7 +225,7 @@ namespace _1CInstaller
                 {
                     try
                     {
-                        string destinationFolder = Path.Combine(installerPath, Path.GetFileNameWithoutExtension(fileToDownload));
+                        string destinationFolder = Path.Combine(platformsPath, Path.GetFileNameWithoutExtension(fileToDownload));
                         SevenZipExtractor.ExtractArchive(localFilePath, destinationFolder);
                         AddMessageToRichTextBox(richTextBoxVersions, $"Файл {fileToDownload} успешно разархивирован в {destinationFolder}.");
                         SevenZipExtractor.RunSetup(destinationFolder, richTextBoxVersions);

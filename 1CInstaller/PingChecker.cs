@@ -1,5 +1,5 @@
 ﻿using System;
-using System.Net.NetworkInformation;
+using System.Net.Http;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
@@ -7,72 +7,45 @@ namespace _1CInstaller
 {
     public class PingChecker
     {
-        private Timer pingTimer;
-        private string ftpServerIP;
-        private RichTextBox outputTextBox;
+        private readonly string url;
+        private readonly RichTextBox output;
+        private readonly System.Windows.Forms.Timer timer;
 
-        public PingChecker(string ftpServerIP, RichTextBox outputTextBox)
+        public PingChecker(string url, RichTextBox output)
         {
-            this.ftpServerIP = ftpServerIP;
-            this.outputTextBox = outputTextBox;
-            InitializePingTimer();
+            this.url = url;
+            this.output = output;
+            timer = new System.Windows.Forms.Timer();
+            timer.Interval = 60000; // 1 минута
+            timer.Tick += Timer_Tick;
+            timer.Start();
         }
 
-        private void InitializePingTimer()
+        private async void Timer_Tick(object sender, EventArgs e)
         {
-            pingTimer = new Timer();
-            pingTimer.Interval = 60000; // 1 минута
-            pingTimer.Tick += PingTimer_Tick;
-            pingTimer.Start();
+            await CheckPageAvailabilityAsync();
         }
 
-        private async void PingTimer_Tick(object sender, EventArgs e)
-        {
-            bool isPingSuccessful = await PingServer(ftpServerIP);
-
-            if (isPingSuccessful)
-            {
-                AddMessageToRichTextBox(outputTextBox, $"FTP сервер {ftpServerIP} доступен.");
-            }
-            else
-            {
-                AddMessageToRichTextBox(outputTextBox, $"FTP сервер {ftpServerIP} недоступен.");
-            }
-        }
-
-        private async Task<bool> PingServer(string ipAddress)
+        public async Task CheckPageAvailabilityAsync()
         {
             try
             {
-                using (Ping ping = new Ping())
+                using (HttpClient client = new HttpClient())
                 {
-                    for (int i = 0; i < 4; i++) // Пинг 4 раза
+                    HttpResponseMessage response = await client.GetAsync(url);
+                    if (response.IsSuccessStatusCode)
                     {
-                        PingReply reply = await ping.SendPingAsync(ipAddress);
-                        if (reply.Status != IPStatus.Success)
-                        {
-                            return false; // Если хотя бы один пинг не удался, вернуть false
-                        }
+                        Form1.AddMessageToRichTextBox(output, $"Страница {url} доступна.");
                     }
-                    return true; // Если все 4 пинга успешны, вернуть true
+                    else
+                    {
+                        Form1.AddMessageToRichTextBox(output, $"Страница {url} недоступна. Статус: {response.StatusCode}");
+                    }
                 }
             }
             catch (Exception ex)
             {
-                AddMessageToRichTextBox(outputTextBox, $"Ошибка пинга: {ex.Message}");
-                return false;
-            }
-        }
-
-        private void AddMessageToRichTextBox(RichTextBox richTextBox, string message)
-        {
-            if (richTextBox.InvokeRequired)
-            {
-                richTextBox.Invoke(new Action(() => richTextBox.AppendText(message + Environment.NewLine)));
-            }
-            else
-            {
-                richTextBox.AppendText(message + Environment.NewLine);
+                Form1.AddMessageToRichTextBox(output, $"Ошибка при проверке доступности страницы {url}: {ex.Message}");
             }
         }
     }
