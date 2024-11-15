@@ -103,7 +103,7 @@ namespace _1CInstaller
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(513, 278);
+            this.ClientSize = new System.Drawing.Size(514, 281);
             this.Controls.Add(this.Settings);
             this.Controls.Add(this.richTextBoxVersions);
             this.Controls.Add(this.login1C);
@@ -125,7 +125,7 @@ namespace _1CInstaller
         private Button login1C;
         private RichTextBox richTextBoxVersions;
         private Timer pingTimer;
-        private Button Settings;
+        private Button Settings;        
     }
 }
 

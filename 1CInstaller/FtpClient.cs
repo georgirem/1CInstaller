@@ -10,22 +10,51 @@ namespace _1CInstaller
 {
     public class FtpClient : IFtpClient
     {
-        private readonly string ftpServer;
+        /*private readonly string ftpServer;
         private readonly string username;
-        private readonly string password;
+        private readonly string password;*/
+        public string ServerAddress { get; set; } // Адрес сервера
+        public string Username { get; set; } // Имя пользователя
+        public string Password { get; set; } // Пароль
 
-        public FtpClient(string ftpServer, string username, string password)
+        public FtpClient(string serverAddress, string username, string password)
         {
-            this.ftpServer = ftpServer;
-            this.username = username;
-            this.password = password;
+            ServerAddress = serverAddress;
+            Username = username;
+            Password = password;
+        }
+        private FtpWebRequest CreateFtpWebRequest(string url, string method)
+        {
+            FtpWebRequest request = (FtpWebRequest)WebRequest.Create(url);
+            request.Method = method;
+            request.Credentials = new NetworkCredential(Username, Password);
+            return request;
         }
 
-        public async Task<long> GetFileSizeAsync(string ftpFilePath, RichTextBox output)
+        /*public async Task<long> GetFileSizeAsync(string ftpFilePath, RichTextBox output)
         {
             FtpWebRequest request = (FtpWebRequest)WebRequest.Create(ftpFilePath);
             request.Method = WebRequestMethods.Ftp.GetFileSize;
-            request.Credentials = new NetworkCredential(username, password);
+            request.Credentials = new NetworkCredential(Username, Password);
+
+            try
+            {
+                using (FtpWebResponse response = (FtpWebResponse)await request.GetResponseAsync())
+                {
+                    long fileSize = response.ContentLength;
+                    Form1.AddMessageToRichTextBox(output, $"Размер файла: {fileSize} байт");
+                    return fileSize;
+                }
+            }
+            catch (Exception ex)
+            {
+                Form1.AddMessageToRichTextBox(output, "Ошибка при получении размера файла: " + ex.Message);
+                return -1;
+            }
+        }*/
+        public async Task<long> GetFileSizeAsync(string ftpFilePath, RichTextBox output)
+        {
+            FtpWebRequest request = CreateFtpWebRequest(ftpFilePath, WebRequestMethods.Ftp.GetFileSize);
 
             try
             {
@@ -42,17 +71,42 @@ namespace _1CInstaller
                 return -1;
             }
         }
-
-        public async Task<List<string>> GetFileList(string directoryPath, string version, Label progressLabel, RichTextBox output)
+        /*public async Task<List<string>> GetFileList(string directoryPath, string version, Label progressLabel, RichTextBox output)
         {
             List<string> files = new List<string>();
-            string ftpDirectoryPath = ftpServer + directoryPath;
-
+            string ftpDirectoryPath = ServerAddress;// + directoryPath;
             try
             {
                 FtpWebRequest request = (FtpWebRequest)WebRequest.Create(ftpDirectoryPath);
                 request.Method = WebRequestMethods.Ftp.ListDirectory;
-                request.Credentials = new NetworkCredential(username, password);
+                request.Credentials = new NetworkCredential(Username, Password);
+                using (FtpWebResponse response = (FtpWebResponse)await request.GetResponseAsync())
+                using (StreamReader reader = new StreamReader(response.GetResponseStream()))
+                {
+                    while (!reader.EndOfStream)
+                    {
+                        string filename = reader.ReadLine();
+                        if (filename.Contains(version))
+                        {
+                            files.Add(filename);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Form1.AddMessageToRichTextBox(output, "Ошибка при получении списка файлов: " + ex.Message);
+            }
+            return files;
+        }*/
+        public async Task<List<string>> GetFileList(string directoryPath, string version, Label progressLabel, RichTextBox output)
+        {
+            List<string> files = new List<string>();
+            string ftpDirectoryPath = ServerAddress;
+
+            try
+            {
+                FtpWebRequest request = CreateFtpWebRequest(ftpDirectoryPath, WebRequestMethods.Ftp.ListDirectory);
 
                 using (FtpWebResponse response = (FtpWebResponse)await request.GetResponseAsync())
                 using (StreamReader reader = new StreamReader(response.GetResponseStream()))
@@ -88,7 +142,7 @@ namespace _1CInstaller
             {
                 FtpWebRequest request = (FtpWebRequest)WebRequest.Create(ftpFilePath);
                 request.Method = WebRequestMethods.Ftp.DownloadFile;
-                request.Credentials = new NetworkCredential(username, password);
+                request.Credentials = new NetworkCredential(Username, Password);
 
                 using (FtpWebResponse response = (FtpWebResponse)await request.GetResponseAsync())
                 using (Stream responseStream = response.GetResponseStream())
@@ -131,9 +185,51 @@ namespace _1CInstaller
                 return false;
             }
         }
+        public async Task<bool> CheckConnectionAsync(RichTextBox output)
+        {
+            try
+            {
+                string ftpServer = ServerAddress;
+                if (!ftpServer.EndsWith("/"))
+                {
+                    ftpServer += "/";
+                }
 
+                FtpWebRequest request = (FtpWebRequest)WebRequest.Create(ftpServer);
+                request.Method = WebRequestMethods.Ftp.ListDirectory;
+                request.Credentials = new NetworkCredential(Username, Password);
 
-
-
+                using (FtpWebResponse response = (FtpWebResponse)await request.GetResponseAsync())
+                {
+                    if (response.StatusCode == FtpStatusCode.OpeningData || response.StatusCode == FtpStatusCode.DataAlreadyOpen || response.StatusCode == FtpStatusCode.ClosingData)
+                    {
+                        Form1.AddMessageToRichTextBox(output, "Соединение с FTP-сервером успешно установлено.");
+                        return true;
+                    }
+                    else
+                    {
+                        Form1.AddMessageToRichTextBox(output, $"Не удалось установить соединение с FTP-сервером: {response.StatusDescription}");
+                        return false;
+                    }
+                }
+            }
+            catch (WebException ex)
+            {
+                if (ex.Response is FtpWebResponse response)
+                {
+                    Form1.AddMessageToRichTextBox(output, $"Ошибка при проверке соединения с FTP: {response.StatusDescription}");
+                }
+                else
+                {
+                    Form1.AddMessageToRichTextBox(output, $"Ошибка при проверке соединения с FTP: {ex.Message}");
+                }
+                return false;
+            }
+            catch (Exception ex)
+            {
+                Form1.AddMessageToRichTextBox(output, $"Неизвестная ошибка при проверке соединения с FTP: {ex.Message}");
+                return false;
+            }
+        }
     }
 }

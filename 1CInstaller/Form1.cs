@@ -13,7 +13,7 @@ namespace _1CInstaller
 {
     public partial class Form1 : Form
     {
-        
+        private Settings settingsForm;
         private IFtpClient ftpClient;
         private string installerPath;//Домашняя директория программы
         private string platformsPath;//Путь к каталогу куда скачивается дистрибутив
@@ -22,14 +22,26 @@ namespace _1CInstaller
         private CancellationTokenSource cancellationTokenSource;
         private PingChecker pingChecker;
         private HashSet<string> oneCPrograms;
+        private string settingsFilePath;
+
+        private string ftpServerAddress;
+        private string ftpLogin;
+        private string ftpPassword;
+        private string downloadDirectory;
+
+        private bool isPanelVisible = false; // Индикатор состояния панели
+        private int panelWidth = 200; // Ширина панели
+        /*private int panelSpeed = 10; // Скорость анимации
+        private Timer timer; // Таймер для анимации*/
 
         public Form1()
         {
             InitializeComponent();
             InitializeInstallerPath();
-
-            // Изменение цвета фона формы
-            //this.BackColor = Color.LightGray; // Светло-серый фон
+            
+            // Подписка на событие изменения позиции формы
+            this.LocationChanged += Form1_LocationChanged;
+            // Изменение цвета фона формы            
             this.BackColor = Color.WhiteSmoke; // Светло-серый фон
             // Настройка кнопки "Обновить"
             Update.BackColor = Color.Gold; // Мягкий светло-зелёный цвет
@@ -56,7 +68,65 @@ namespace _1CInstaller
             //pingChecker = new PingChecker("http://ig.badcore.net:14178/AccountingIG", richTextBoxVersions);
             oneCPrograms = new HashSet<string>();
             LoadInstalledOneCVersions();
+            LoadSettings();
 
+        }
+        // Обработчик события изменения позиции основной формы
+        private void Form1_LocationChanged(object sender, EventArgs e)
+        {
+            if (settingsForm != null && !settingsForm.IsDisposed)
+            {
+                // Обновляем позицию формы настроек при перемещении основной формы
+                settingsForm.Location = new Point(this.Location.X + this.Width, this.Location.Y);
+            }
+        }
+        private void LoadSettings()
+        {
+            // Проверяем, существует ли файл settings.ini
+            if (File.Exists(settingsFilePath))
+            {
+                var settings = File.ReadAllLines(settingsFilePath);
+
+                foreach (var line in settings)
+                {
+                    // Ищем первое вхождение символа '=' и разбиваем строку только на две части
+                    int indexOfEqualSign = line.IndexOf('=');
+
+                    if (indexOfEqualSign > 0)
+                    {
+                        string key = line.Substring(0, indexOfEqualSign);
+                        string value = line.Substring(indexOfEqualSign + 1);
+
+                        switch (key)
+                        {
+                            case "ServerAddress":
+                                ftpClient.ServerAddress = value;
+                                break;
+                            case "Login":
+                                ftpClient.Username = value;
+                                break;
+                            case "Password":
+                                try
+                                {
+                                    ftpClient.Password = EncryptionHelper.DecryptString(value); // Расшифровываем пароль
+                                }
+                                catch
+                                {
+                                    ftpClient.Password = "Ошибка расшифровки"; // Если не удается расшифровать
+                                }
+                                break;
+                            case "DownloadDirectory":
+                                platformsPath = value;
+                                break;
+                        }
+                    }
+                }
+            }
+            else
+            {
+                // Если файла настроек нет, вызываем InitializeInstallerPath() для его создания
+                InitializeInstallerPath();
+            }
         }
 
         private void InitializeInstallerPath()
@@ -71,19 +141,37 @@ namespace _1CInstaller
             }
 
             // Создание файла settings.ini в кодировке по умолчанию, если файл не существует
-            string settingsFilePath = Path.Combine(installerPath, "settings.ini");
-            if (!File.Exists(settingsFilePath))
+            settingsFilePath = Path.Combine(installerPath, "settings.ini");
+
+            // Проверяем, существует ли файл settings.ini, и если нет - заполняем его значениями по умолчанию
+            if (!File.Exists(settingsFilePath) || new FileInfo(settingsFilePath).Length == 0)
             {
-                // Создаём пустой файл в текущей системной кодировке
-                File.WriteAllText(settingsFilePath, string.Empty, System.Text.Encoding.Default);
+                // Значения по умолчанию
+                string defaultServerAddress = "ftp://ftp.in-grp.net/installers/";
+                string defaultLogin = "anonymous";
+                string defaultPassword = EncryptionHelper.EncryptString("1@1");
+                string defaultDownloadDirectory = Path.Combine(installerPath, "platforms");
+                // Сохранение настроек по умолчанию в settings.ini
+                using (StreamWriter writer = new StreamWriter(settingsFilePath))
+                {
+                    writer.WriteLine($"ServerAddress={defaultServerAddress}");
+                    writer.WriteLine($"Login={defaultLogin}");
+                    writer.WriteLine($"Password={defaultPassword}");
+                    writer.WriteLine($"DownloadDirectory={defaultDownloadDirectory}");
+                }
+                // Создание каталога для скачивания, если он не существует
+                if (!Directory.Exists(defaultDownloadDirectory))
+                {
+                    Directory.CreateDirectory(defaultDownloadDirectory);
+                }
             }
 
-            // Создание подкаталога platforms, если он не существует
+            /*// Создание подкаталога platforms, если он не существует
             platformsPath = Path.Combine(installerPath, "platforms");
             if (!Directory.Exists(platformsPath))
             {
                 Directory.CreateDirectory(platformsPath);
-            }
+            }*/
         }
 
         private void ClearDirectory(string path)
@@ -208,7 +296,9 @@ namespace _1CInstaller
                     return;
                 }
 
-                string ftpFilePath = "ftp://ftp.in-grp.net/installers/" + fileToDownload;
+                // string ftpFilePath = "ftp://ftp.in-grp.net/installers/" + fileToDownload;
+                //string ftpFilePath = ftpServerAddress + fileToDownload;ftpClient.ServerAddress
+                string ftpFilePath = ftpClient.ServerAddress + fileToDownload;
                 string localFilePath = Path.Combine(platformsPath, fileToDownload);
 
                 bool downloadSuccess = await ftpClient.DownloadFileAsync(ftpFilePath, localFilePath, downloadStatusLabel, richTextBoxVersions, cancellationTokenSource.Token);
@@ -250,15 +340,29 @@ namespace _1CInstaller
 
         private async Task<bool> FetchFtpDataAsync()
         {
+            if (!await ftpClient.CheckConnectionAsync(richTextBoxVersions))
+            {
+                AddMessageToRichTextBox(richTextBoxVersions, "Ошибка: не удалось подключиться к FTP-серверу.");
+                return false;
+            }
+
             if (!string.IsNullOrEmpty(latestFtpVersion) && ftpFileList != null && ftpFileList.Count > 0)
             {
                 return true;
             }
 
-            string ftpServer = "ftp://ftp.in-grp.net/installers/";
+            /*string ftpServer = "ftp://ftp.in-grp.net/installers/";
             string username = "anonymous";
-            string password = "1@1";
+            string password = "1@1";*/
+            string ftpServer = ftpClient.ServerAddress;
+            string username = ftpClient.Username;
+            string password = ftpClient.Password;
             ftpFileList = new List<string>();
+            
+            if (!ftpServer.EndsWith("/"))
+            {
+                ftpServer += "/";
+            }
 
             try
             {
@@ -278,6 +382,7 @@ namespace _1CInstaller
                 }
 
                 ftpFileList = await ftpClient.GetFileList("/installers/", latestFtpVersion.Replace('.', '_'), downloadStatusLabel, richTextBoxVersions);
+                //ftpFileList = await ftpClient.GetFileList(ftpServer, latestFtpVersion.Replace('.', '_'), downloadStatusLabel, richTextBoxVersions);
                 return true;
             }
             catch (Exception ex)
@@ -378,11 +483,21 @@ namespace _1CInstaller
 
         private void Settings_Click(object sender, EventArgs e)
         {
-            // Создаём экземпляр формы настроек
-            Settings settingsForm = new Settings();
+            if (settingsForm == null || settingsForm.IsDisposed)
+            {
+                // Создаём форму настроек, если она не существует или была закрыта
 
-            // Открываем форму настроек в модальном окне
-            settingsForm.ShowDialog();
+                string settingsFilePath = Path.Combine(installerPath, "settings.ini");
+                settingsForm = new Settings(settingsFilePath);
+                settingsForm.StartPosition = FormStartPosition.Manual;
+                settingsForm.Location = new Point(this.Location.X + this.Width, this.Location.Y);
+                settingsForm.Show();
+            }
+            else
+            {
+                // Если форма открыта, то закрываем её
+                settingsForm.Close();
+            }
         }
     }
 }
